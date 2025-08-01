@@ -60,5 +60,11 @@ The app will be available at [http://localhost:3000](http://localhost:3000).
 - You can extend the signaling server for authentication, rooms, or additional features.
 - The frontend is easy to modify for chat, screen sharing, or other RTC features.
 
+
+## Contributing
+Contributions are welcome! Please open an issue or submit a pull request.
+
+Made with ❤️ by [Antonio Scapellato](https://scapellato.dev)
+
 ## License
 MIT
