@@ -13,6 +13,11 @@ export default function Home() {
   const [inCall, setInCall] = useState(false);
   const [isCaller, setIsCaller] = useState(false);
   const [status, setStatus] = useState("");
+  const [chatMessages, setChatMessages] = useState<{ sender: string; message: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [username, setUsername] = useState("");
+  const [usernameError, setUsernameError] = useState("");
+
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<any>(null);
@@ -26,6 +31,11 @@ export default function Home() {
 
   // Start signaling and media
   const startCall = async () => {
+    if (!username.trim()) {
+      setUsernameError("Please enter your name before creating a call.");
+      return;
+    }
+    setUsernameError("");
     const newRoomId = generateRoomId();
     setRoomId(newRoomId);
     setIsCaller(true);
@@ -35,6 +45,11 @@ export default function Home() {
 
   // Join existing call
   const joinCall = async () => {
+    if (!username.trim()) {
+      setUsernameError("Please enter your name before joining a call.");
+      return;
+    }
+    setUsernameError("");
     if (!roomId) return;
     setIsCaller(false);
     setStatus("Joining call...");
@@ -105,11 +120,24 @@ export default function Home() {
       setStatus("Peer left the call.");
       cleanup();
     });
+    // Chat message handler
+    socket.on("chat-message", ({ message, sender }) => {
+      setChatMessages(prev => [...prev, { sender, message }]);
+    });
     setInCall(true);
     setStatus(isCaller ? "Waiting for peer..." : "Connected!");
   };
 
-  // Cleanup
+  // Send chat message
+  const sendChatMessage = () => {
+    if (chatInput.trim() && socketRef.current && roomId) {
+      const senderName = username || "Anonymous";
+      socketRef.current.emit("chat-message", { roomId, message: chatInput, sender: senderName });
+      setChatMessages(prev => [...prev, { sender: senderName, message: chatInput }]);
+      setChatInput("");
+    }
+  };
+
   const cleanup = () => {
     setInCall(false);
     setStatus("");
@@ -139,44 +167,93 @@ export default function Home() {
         <meta charSet="UTF-8" />
       </Head>
       <main>
-      <div className={`h-screen flex flex-col gap-4 items-center justify-center`}>
-        <div className="flex flex-col gap-4 items-center">
-          <h1 className="text-2xl font-bold mb-2">WebRTC Template</h1>
-          {!inCall ? (
-            <>
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-xl mb-2" onClick={startCall}>Create Call</button>
-              <div className="flex gap-2 mb-2 bg-gray-100 p-2 rounded-xl">
+        <div className={`h-screen flex flex-col gap-4 items-center justify-center`}>
+          <div className="flex flex-col gap-4 items-center">
+            <h1 className="text-2xl font-bold mb-2">WebRTC Template</h1>
+            {!inCall ? (
+              <>
                 <input
                   type="text"
-                  className="px-2 py-1 rounded"
-                  placeholder="Enter Call ID"
-                  value={roomId}
-                  onChange={e => setRoomId(e.target.value)}
+                  className="px-2 py-1 rounded border mb-2"
+                  placeholder="Your name (required)"
+                  value={username}
+                  onChange={e => { setUsername(e.target.value); setUsernameError(""); }}
                 />
-                <button className="bg-cyan-500 text-white px-4 py-2 rounded-xl" onClick={joinCall}>Join Call</button>
+                {usernameError && <div className="text-red-600 text-sm mb-2">{usernameError}</div>}
+                <button
+                  className="bg-blue-600 text-white px-4 py-2 rounded-xl mb-2 disabled:opacity-50"
+                  onClick={startCall}
+                  disabled={!username.trim()}
+                >
+                  Create Call
+                </button>
+                <div className="flex gap-2 mb-2 bg-gray-100 p-2 rounded-xl">
+                  <input
+                    type="text"
+                    className="px-2 py-1 rounded"
+                    placeholder="Enter Call ID"
+                    value={roomId}
+                    onChange={e => setRoomId(e.target.value)}
+                  />
+                  <button
+                    className="bg-cyan-500 text-white px-4 py-2 rounded-xl disabled:opacity-50"
+                    onClick={joinCall}
+                    disabled={!username.trim()}
+                  >
+                    Join Call
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-2">Call ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{roomId}</span></div>
+                <button className="bg-red-600 text-white px-4 py-2 rounded mb-2" onClick={cleanup}>Leave Call</button>
+              </>
+            )}
+            <div className="mb-2 text-blue-700 min-h-[24px]">{status}</div>
+            <div className="flex gap-4">
+              <div>
+                <div className="font-bold text-center">Local Video</div>
+                <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
               </div>
-            </>
-          ) : (
-            <>
-              <div className="mb-2">Call ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{roomId}</span></div>
-              <button className="bg-red-600 text-white px-4 py-2 rounded mb-2" onClick={cleanup}>Leave Call</button>
-            </>
-          )}
-          <div className="mb-2 text-blue-700 min-h-[24px]">{status}</div>
-          <div className="flex gap-4">
-            <div>
-              <div className="font-bold text-center">Local Video</div>
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
+              <div>
+                <div className="font-bold text-center">Remote Video</div>
+                <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
+              </div>
             </div>
-            <div>
-              <div className="font-bold text-center">Remote Video</div>
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
-            </div>
+            {/* Chat UI */}
+            {inCall && (
+              <div className="w-full max-w-md mt-4 bg-white border rounded-xl shadow p-4 flex flex-col gap-2">
+                <div className="font-bold mb-2">Live Chat</div>
+                <div className="flex flex-col gap-1 h-40 overflow-y-auto bg-gray-50 p-2 rounded">
+                  {chatMessages.length === 0 && <div className="text-gray-400 text-sm">No messages yet.</div>}
+                  {chatMessages.map((msg, idx) => (
+                    <div key={idx} className="text-sm">
+                      <span className="font-semibold text-blue-700">{msg.sender}:</span> {msg.message}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    className="flex-1 px-2 py-1 rounded border"
+                    placeholder="Type a message..."
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') sendChatMessage(); }}
+                  />
+                  <button
+                    className="bg-blue-500 text-white px-4 py-1 rounded"
+                    onClick={sendChatMessage}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
       </main>
     </>
   );
 }
-

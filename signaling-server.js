@@ -19,6 +19,10 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('signal', data);
   });
 
+  socket.on('chat-message', ({ roomId, message, sender }) => {
+    socket.to(roomId).emit('chat-message', { message, sender });
+  });
+
   socket.on('disconnecting', () => {
     for (const roomId of socket.rooms) {
       if (roomId !== socket.id) {
